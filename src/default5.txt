@@ -1,0 +1,656 @@
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+  const SCOPES = [
+    "streaming",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+  ];
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [deviceId, setDeviceId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false); // Track playback state
+
+  // Fetch token from URL hash and initialize the player
+  useEffect(() => {
+    const hash = window.location.hash;
+    let storedToken = window.localStorage.getItem("token");
+
+    if (!storedToken && hash) {
+      storedToken = hash.substring(1).split("&")
+        .find(elem => elem.startsWith("access_token"))
+        .split("=")[1];
+      window.location.hash = "";
+      window.localStorage.setItem("token", storedToken);
+    }
+    setToken(storedToken);
+
+    if (storedToken) {
+      loadSpotifySDK(storedToken);
+    }
+  }, []);
+
+  const loadSpotifySDK = (authToken) => {
+    const script = document.createElement("script");
+    script.src = "https://sdk.scdn.co/spotify-player.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const player = new window.Spotify.Player({
+        name: 'Spotify Web Player',
+        getOAuthToken: cb => { cb(authToken); },
+        volume: 0.5,
+      });
+
+      player.addListener('ready', ({ device_id }) => {
+        console.log('Device ready with ID:', device_id);
+        setDeviceId(device_id);
+        transferPlayback(device_id);  // Make this the active player
+      });
+
+      player.addListener('player_state_changed', (state) => {
+        if (!state) return;
+        setIsPlaying(!state.paused);
+        console.log('Player state changed:', state);
+      });
+
+      player.connect();
+    };
+  };
+
+  const transferPlayback = async (deviceId) => {
+    try {
+      await axios.put(
+        "https://api.spotify.com/v1/me/player",
+        { device_ids: [deviceId], play: false },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      console.log("Playback transferred successfully.");
+    } catch (error) {
+      console.error("Error transferring playback:", error);
+    }
+  };
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    const { data } = await axios.get("https://api.spotify.com/v1/search", {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { q: searchKey, type: "track", limit: 5 }
+    });
+    setTracks(data.tracks.items);
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    setLyrics("");  // Clear previous lyrics
+
+    try {
+      await axios.put(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+        { uris: [track.uri] },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setIsPlaying(true);
+      console.log(`Playing track: ${track.name}`);
+      fetchLyrics(track);  // Fetch lyrics for the selected track
+    } catch (error) {
+      console.error("Error playing track:", error);
+    }
+  };
+
+  const fetchLyrics = async (track) => {
+    try {
+      const { data } = await axios.get(`https://api.lyrics.ovh/v1/${track.artists[0].name}/${track.name}`);
+      setLyrics(data.lyrics || "No lyrics found.");
+    } catch (error) {
+      console.error("Error fetching lyrics:", error);
+      setLyrics("Lyrics not available.");
+    }
+  };
+
+  const togglePlayback = async () => {
+    try {
+      if (isPlaying) {
+        await axios.put(
+          "https://api.spotify.com/v1/me/player/pause",
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setIsPlaying(false);
+        console.log("Playback paused.");
+      } else {
+        await axios.put(
+          `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setIsPlaying(true);
+        console.log("Playback resumed.");
+      }
+    } catch (error) {
+      console.error("Error toggling playback:", error);
+    }
+  };
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const renderTracks = () => {
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)}
+        style={{
+          cursor: "pointer",
+          backgroundColor: selectedTrack && selectedTrack.id === track.id ? "lightblue" : "transparent",
+          padding: "10px",
+          border: "1px solid black",
+          margin: "5px"
+        }}
+      >
+        {track.name} by {track.artists.map(artist => artist.name).join(", ")}
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Spotify Lyrics Player</h1>
+        {!token ? (
+          <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}&scope=${SCOPES.join("%20")}`}>
+            Login to Spotify
+          </a>
+        ) : (
+          <button onClick={logout}>Logout</button>
+        )}
+
+        {token && (
+          <form onSubmit={searchTracks}>
+            <input type="text" onChange={(e) => setSearchKey(e.target.value)} />
+            <button type="submit">Search</button>
+          </form>
+        )}
+
+        {renderTracks()}
+
+        {selectedTrack && (
+          <div>
+            <h2>Lyrics for "{selectedTrack.name}":</h2>
+            <pre>{lyrics}</pre>
+            <button onClick={togglePlayback}>
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+          </div>
+        )}
+      </header>
+    </div>
+  );
+}
+
+export default App;
+
+
+
+
+
+gdasgjkasgfjkdgjfkdgfjkbcvbkjcadsbhdgfjgfjdshfjhdsfjkshfjkfdsfhflkjsdfhjkdshfjdshjhdfjdhfs.k
+
+
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+  const SCOPES = [
+    "streaming",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+  ];
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [deviceId, setDeviceId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    let storedToken = window.localStorage.getItem("token");
+
+    if (!storedToken && hash) {
+      storedToken = hash.substring(1).split("&")
+        .find(elem => elem.startsWith("access_token"))
+        .split("=")[1];
+      window.location.hash = "";
+      window.localStorage.setItem("token", storedToken);
+    }
+    setToken(storedToken);
+
+    if (storedToken) {
+      loadSpotifySDK(storedToken);
+    }
+  }, []);
+
+  const loadSpotifySDK = (authToken) => {
+    const script = document.createElement("script");
+    script.src = "https://sdk.scdn.co/spotify-player.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const player = new window.Spotify.Player({
+        name: 'Spotify Web Player',
+        getOAuthToken: cb => { cb(authToken); },
+        volume: 0.5,
+      });
+
+      player.addListener('ready', ({ device_id }) => {
+        setDeviceId(device_id);
+        transferPlayback(device_id);
+      });
+
+      player.addListener('player_state_changed', (state) => {
+        if (!state) return;
+        setIsPlaying(!state.paused);
+      });
+
+      player.connect();
+    };
+  };
+
+  const transferPlayback = async (deviceId) => {
+    try {
+      await axios.put(
+        "https://api.spotify.com/v1/me/player",
+        { device_ids: [deviceId], play: false },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error("Error transferring playback:", error);
+    }
+  };
+
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    try {
+      const { data } = await axios.get("https://api.spotify.com/v1/search", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { q: searchKey, type: "track", limit: 5 }
+      });
+      setTracks(data.tracks.items);
+      setSelectedTrack(null);
+      setLyrics("");
+    } catch (error) {
+      console.error("Error searching tracks:", error);
+    }
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    setLyrics("");
+
+    try {
+      await axios.put(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+        { uris: [track.uri] },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setIsPlaying(true);
+      fetchLyrics(track);
+    } catch (error) {
+      console.error("Error playing track:", error);
+    }
+  };
+
+  const fetchLyrics = async (track) => {
+    try {
+      const { data } = await axios.get(`https://api.lyrics.ovh/v1/${track.artists[0].name}/${track.name}`);
+      setLyrics(data.lyrics || "No lyrics found.");
+    } catch (error) {
+      console.error("Error fetching lyrics:", error);
+      setLyrics("Lyrics not available.");
+    }
+  };
+
+  const togglePlayback = async () => {
+    try {
+      if (isPlaying) {
+        await axios.put("https://api.spotify.com/v1/me/player/pause", {}, { headers: { Authorization: `Bearer ${token}` } });
+        setIsPlaying(false);
+      } else {
+        await axios.put(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {}, { headers: { Authorization: `Bearer ${token}` } });
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error("Error toggling playback:", error);
+    }
+  };
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const renderTracks = () => {
+    if (tracks.length === 0) return <div>No tracks found.</div>;
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)}
+        className={`track ${selectedTrack && selectedTrack.id === track.id ? 'selected' : ''}`}
+      >
+        <img src={track.album.images[0]?.url} alt={track.name} className="album-art" />
+        <div className="track-info">
+          <span>{track.name}</span>
+          <span>by {track.artists.map(artist => artist.name).join(", ")}</span>
+        </div>
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <div className="container">
+        <header className="App-header">
+          <h1>Spotify Lyrics Player</h1>
+          {!token ? (
+            <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}&scope=${SCOPES.join("%20")}`}>
+              Login to Spotify
+            </a>
+          ) : (
+            <button onClick={logout}>Logout</button>
+          )}
+
+          {token && (
+            <form onSubmit={searchTracks}>
+              <input
+                type="text"
+                value={searchKey}
+                onChange={(e) => setSearchKey(e.target.value)}
+                placeholder="Search for a track"
+              />
+              <button type="submit">Search</button>
+            </form>
+          )}
+
+          <div className="track-list">
+            {renderTracks()}
+          </div>
+
+          {selectedTrack && (
+            <div>
+              <h2>Lyrics for "{selectedTrack.name}":</h2>
+              <div className="play-pause-button">
+                <button onClick={togglePlayback}>
+                  {isPlaying ? "Pause" : "Play"}
+                </button>
+              </div>
+              <pre>{lyrics}</pre>
+            </div>
+          )}
+        </header>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+import Sanscript from '@indic-transliteration/sanscript';
+
+// Helper function to check if text contains Devanagari characters
+const containsDevanagari = (text) => /[\u0900-\u097F]/.test(text);
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+  const SCOPES = [
+    "streaming",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+  ];
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [romanizedLyrics, setRomanizedLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [deviceId, setDeviceId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Token handling
+  useEffect(() => {
+    const hash = window.location.hash;
+    let storedToken = window.localStorage.getItem("token");
+
+    if (!storedToken && hash) {
+      storedToken = hash.substring(1).split("&")
+        .find(elem => elem.startsWith("access_token"))
+        .split("=")[1];
+      window.location.hash = "";
+      window.localStorage.setItem("token", storedToken);
+    }
+    setToken(storedToken);
+
+    if (storedToken) {
+      loadSpotifySDK(storedToken);
+    }
+  }, []);
+
+  const loadSpotifySDK = (authToken) => {
+    const script = document.createElement("script");
+    script.src = "https://sdk.scdn.co/spotify-player.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const player = new window.Spotify.Player({
+        name: 'Spotify Web Player',
+        getOAuthToken: cb => { cb(authToken); },
+        volume: 0.5,
+      });
+
+      player.addListener('ready', ({ device_id }) => {
+        setDeviceId(device_id);
+        transferPlayback(device_id);
+      });
+
+      player.addListener('player_state_changed', (state) => {
+        if (!state) return;
+        setIsPlaying(!state.paused);
+      });
+
+      player.connect();
+    };
+  };
+
+  const transferPlayback = async (deviceId) => {
+    try {
+      await axios.put(
+        "https://api.spotify.com/v1/me/player",
+        { device_ids: [deviceId], play: false },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error("Error transferring playback:", error);
+    }
+  };
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    try {
+      const { data } = await axios.get("https://api.spotify.com/v1/search", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { q: searchKey, type: "track", limit: 5 }
+      });
+      setTracks(data.tracks.items);
+      setSelectedTrack(null);
+      setLyrics("");
+      setRomanizedLyrics("");
+    } catch (error) {
+      console.error("Error searching tracks:", error);
+    }
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    setLyrics("");
+    setRomanizedLyrics("");
+
+    try {
+      await axios.put(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+        { uris: [track.uri] },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setIsPlaying(true);
+      fetchLyrics(track);
+    } catch (error) {
+      console.error("Error playing track:", error);
+    }
+  };
+
+  const fetchLyrics = async (track) => {
+    try {
+      const { data } = await axios.get(`https://api.lyrics.ovh/v1/${track.artists[0].name}/${track.name}`);
+      const fetchedLyrics = data.lyrics || "No lyrics found.";
+      setLyrics(fetchedLyrics);
+
+      // Check if the lyrics contain Devanagari and transliterate if true
+      if (containsDevanagari(fetchedLyrics)) {
+        const romanized = Sanscript.t(fetchedLyrics, 'devanagari', 'iast');
+        setRomanizedLyrics(romanized);
+      } else {
+        setRomanizedLyrics("Romanized lyrics not available.");
+      }
+    } catch (error) {
+      console.error("Error fetching lyrics:", error);
+      setLyrics("Lyrics not available.");
+      setRomanizedLyrics("Romanized lyrics not available.");
+    }
+  };
+
+  const togglePlayback = async () => {
+    try {
+      if (isPlaying) {
+        await axios.put("https://api.spotify.com/v1/me/player/pause", {}, { headers: { Authorization: `Bearer ${token}` } });
+        setIsPlaying(false);
+      } else {
+        await axios.put(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {}, { headers: { Authorization: `Bearer ${token}` } });
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error("Error toggling playback:", error);
+    }
+  };
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const renderTracks = () => {
+    if (tracks.length === 0) return <div>No tracks found.</div>;
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)}
+        className={`track ${selectedTrack && selectedTrack.id === track.id ? 'selected' : ''}`}
+      >
+        <img src={track.album.images[0]?.url} alt={track.name} className="album-art" />
+        <div className="track-info">
+          <span>{track.name}</span>
+          <span>by {track.artists.map(artist => artist.name).join(", ")}</span>
+        </div>
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <div className="container">
+        <header className="App-header">
+          <h1>Spotify Lyrics Player</h1>
+          {!token ? (
+            <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}&scope=${SCOPES.join("%20")}`}>
+              Login to Spotify
+            </a>
+          ) : (
+            <button onClick={logout}>Logout</button>
+          )}
+
+          {token && (
+            <form onSubmit={searchTracks}>
+              <input
+                type="text"
+                value={searchKey}
+                onChange={(e) => setSearchKey(e.target.value)}
+                placeholder="Search for a track"
+              />
+              <button type="submit">Search</button>
+            </form>
+          )}
+
+          <div className="track-list">
+            {renderTracks()}
+          </div>
+
+          {selectedTrack && (
+            <div>
+              <h2>Lyrics for "{selectedTrack.name}":</h2>
+              <div className="play-pause-button">
+                <button onClick={togglePlayback}>
+                  {isPlaying ? "Pause" : "Play"}
+                </button>
+              </div>
+              <pre>{lyrics}</pre>
+              <h3>Romanized Lyrics:</h3>
+              <pre>{romanizedLyrics}</pre>
+            </div>
+          )}
+        </header>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+
+
+

@@ -1,0 +1,225 @@
+.App {
+  text-align: center;
+  background-color: #282c34;
+  height: 100vh; /* Full height */
+  display: flex;
+  align-items: center; /* Center vertically */
+  justify-content: center; /* Center horizontally */
+  overflow: hidden; /* Prevent body overflow */
+}
+
+.container {
+  background-color: #3a3f47;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  max-width: 600px; /* Set a max width for the box */
+  width: 100%; /* Full width up to max */
+  max-height: 90vh; /* Limit the height of the container */
+  overflow: auto; /* Enable scrolling for the container */
+}
+
+/* Hide scrollbar for WebKit browsers */
+.container::-webkit-scrollbar {
+  display: none; /* Hide scrollbar */
+}
+
+/* Hide scrollbar for Firefox */
+.container {
+  scrollbar-width: none; /* Hide scrollbar */
+}
+
+/* For other browsers */
+.container {
+  overflow: auto; /* Allow scrolling */
+}
+
+.App-header {
+  margin: 0;
+}
+
+.track-list {
+  max-height: 200px; /* Limit height for track list */
+  overflow-y: auto; /* Enable scrolling for track list */
+  margin: 20px 0;
+}
+
+.track {
+  display: flex; /* Flexbox for alignment */
+  align-items: center; /* Center items vertically */
+  cursor: pointer;
+  background-color: #444;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+.track.selected {
+  background-color: lightblue; /* Highlight selected track */
+}
+
+.track:hover {
+  background-color: #555;
+}
+
+.album-art {
+  width: 50px; /* Fixed size for album art */
+  height: 50px;
+  margin-right: 10px; /* Space between image and text */
+  border-radius: 5px; /* Optional: round corners */
+}
+
+.track-info {
+  display: flex;
+  flex-direction: column; /* Stack track name and artist */
+}
+
+.play-pause-button {
+  margin: 20px 0; /* Space above and below the button */
+}
+
+input {
+  margin-right: 10px;
+}
+
+.lyrics {
+  white-space: pre-wrap; /* Maintain formatting of lyrics */
+  margin: 20px 0; /* Space above and below the lyrics */
+}
+
+.track-info {
+  display: flex;
+  flex-direction: column; /* Stack track name and artist */
+  align-items: center; /* Center items horizontally */
+  text-align: center; /* Center text */
+  flex-grow: 1; /* Allow this to take available space */
+}
+
+button {
+  background-color: #131619; /* Bootstrap primary color */
+  color: white; /* White text */
+  border: none; /* No border */
+  border-radius: 5px; /* Rounded corners */
+  padding: 10px 20px; /* Padding for button */
+  cursor: pointer; /* Pointer cursor on hover */
+  font-size: 16px; /* Font size */
+  transition: background-color 0.3s, transform 0.3s; /* Smooth transition */
+  margin: 10px 0; /* Margin for spacing */
+}
+
+button:hover {
+  background-color: #0d0e0f; /* Darker shade on hover */
+  transform: translateY(-2px); /* Slight lift effect */
+}
+
+button:focus {
+  outline: none; /* Remove outline on focus */
+}
+
+button:disabled {
+  background-color: #cccccc; /* Grey background for disabled state */
+  cursor: not-allowed; /* Not allowed cursor */
+}
+
+.search-bar {
+  display: flex; /* Use flexbox for alignment */
+  justify-content: center; /* Center the search bar */
+  margin: 20px 0; /* Spacing around the search bar */
+}
+
+input[type="text"] {
+  width: 200px; /* Set a fixed width */
+  padding: 10px; /* Padding inside the input */
+  border: 1px solid #ccc; /* Light border */
+  border-radius: 5px; /* Rounded corners */
+  font-size: 16px; /* Font size */
+  transition: border-color 0.3s; /* Smooth transition for focus */
+}
+
+input[type="text"]:focus {
+  border-color: #007bff; /* Change border color on focus */
+  outline: none; /* Remove default outline */
+}
+
+button {
+  margin-left: 10px; /* Space between input and button */
+}
+
+button {
+  background-color: #007bff; /* Button background color */
+  color: white; /* Button text color */
+  border: none; /* Remove border */
+  border-radius: 5px; /* Rounded corners */
+  padding: 10px 15px; /* Padding for button */
+  cursor: pointer; /* Pointer cursor on hover */
+  font-size: 16px; /* Font size */
+  transition: background-color 0.3s, transform 0.3s; /* Transition effects */
+}
+
+button:hover {
+  background-color: #0056b3; /* Darker button color on hover */
+  transform: translateY(-2px); /* Lift effect */
+}
+
+.scrollable-results {
+  max-height: 300px; /* Set a maximum height for the results */
+  overflow-y: auto;
+  display: none; /* Enable vertical scrolling */
+}
+
+/* Hide scrollbar for Webkit browsers (Chrome, Safari) */
+.scrollable-results::-webkit-scrollbar {
+  display: none; /* Hide scrollbar */
+}
+
+/* Hide scrollbar for Firefox */
+.scrollable-results {
+  scrollbar-width: none; /* Hide scrollbar */
+}
+
+.App {
+  background-image: url('C:\Users\rlee0\Downloads\vivid-blurred-colorful-background.jpg'); /* Update with the correct path */
+  background-size: cover; /* Cover the entire screen */
+  background-repeat: no-repeat; /* Prevent repeating the image */
+  background-position: center; /* Center the image */
+  height: 100vh; /* Full height */
+  display: flex; /* Flexbox for centering content */
+  flex-direction: column; /* Stack content vertically */
+  justify-content: center; /* Center vertically */
+  align-items: center; /* Center horizontally */
+}
+
+/* Change text color for the entire app */
+body {
+  color: #ffffff; /* White text color */
+  background-color: #282c34; /* Dark background for contrast */
+}
+
+/* Specific styles for headers */
+h1 {
+  color: #f7f7f7; /* Light blue color for the main heading */
+}
+
+h2 {
+  color: #ffffff; /* Orange color for subheadings */
+}
+
+/* Style for paragraphs */
+p {
+  color: #ffffff; /* Light grey color for paragraph text */
+}
+
+/* Style for buttons */
+button {
+  color: #ffffff; /* White text on buttons */
+  background-color: #2980b9; /* Blue background for buttons */
+  border: none; /* No border */
+  padding: 10px 20px; /* Padding for button */
+  border-radius: 5px; /* Rounded corners */
+  cursor: pointer; /* Pointer cursor on hover */
+}
+
+button:hover {
+  background-color: #3498db; /* Lighter blue on hover */
+}

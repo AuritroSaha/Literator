@@ -1,0 +1,656 @@
+no work lyric finder
+
+
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+import lyricsFinder from 'lyrics-finder'; // Importing correctly at the top
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    let token = window.localStorage.getItem("token");
+
+    if (!token && hash) {
+      const tokenString = hash.substring(1).split("&").find(elem => elem.startsWith("access_token"));
+      if (tokenString) {
+        token = tokenString.split("=")[1];
+        window.localStorage.setItem("token", token);
+      }
+      window.location.hash = "";
+    }
+
+    setToken(token);
+  }, []);
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    if (!token) {
+      console.error("Token is missing.");
+      return;
+    }
+    const { data } = await axios.get("https://api.spotify.com/v1/search", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        q: searchKey,
+        type: "track",
+        limit: 5
+      }
+    });
+    setTracks(data.tracks.items);
+  };
+
+  const getLyrics = async (artist, song) => {
+    try {
+      const lyrics = await lyricsFinder(artist, song) || "No Lyrics Found";
+      return lyrics;
+    } catch (error) {
+      console.error("Error fetching lyrics:", error);
+      return "Error fetching lyrics";
+    }
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    const artistNames = track.artists.map(artist => artist.name).join(", ");
+    const lyrics = await getLyrics(artistNames, track.name);
+    setLyrics(lyrics);
+  };
+
+  const renderTracks = () => {
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)} 
+        style={{
+          cursor: "pointer", 
+          backgroundColor: selectedTrack && selectedTrack.id === track.id ? "lightblue" : "transparent",
+          padding: "10px",
+          border: "1px solid black",
+          margin: "5px"
+        }}
+      >
+        {track.name} by {track.artists.map(artist => artist.name).join(", ")}
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Literator</h1>
+        {!token ? (
+          <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}`}>
+            Login to Spotify
+          </a>
+        ) : (
+          <button onClick={logout}>Logout</button>
+        )}
+
+        {token ? (
+          <form onSubmit={searchTracks}>
+            <input type="text" onChange={e => setSearchKey(e.target.value)} />
+            <button type={"submit"}>Search</button>
+          </form>
+        ) : (
+          <h2>Please login</h2>
+        )}
+
+        {renderTracks()}
+
+        {selectedTrack && (
+          <div>
+            <h2>Lyrics for "{selectedTrack.name}":</h2>
+            <pre style={{ whiteSpace: "pre-wrap", wordWrap: "break-word" }}>
+              {lyrics}
+            </pre>
+          </div>
+        )}
+      </header>
+    </div>
+  );
+}
+
+export default App;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+working gaana
+
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    let token = window.localStorage.getItem("token");
+
+    if (!token && hash) {
+      token = hash.substring(1).split("&").find(elem => elem.startsWith("access_token")).split("=")[1];
+      window.location.hash = "";
+      window.localStorage.setItem("token", token);
+    }
+
+    setToken(token);
+  }, []);
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    const { data } = await axios.get("https://api.spotify.com/v1/search", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        q: searchKey,
+        type: "track",
+        limit: 5
+      }
+    });
+    setTracks(data.tracks.items);
+  };
+
+  
+  const scrapeLyrics = async (url) => {
+    const cheerio = require('cheerio');
+    try {
+      const { data } = await axios.get(url);
+      const $ = cheerio.load(data);
+      const lyrics = $('.lyrics').text().trim(); // Update this selector based on the target site
+      return lyrics || null;
+    } catch (error) {
+      console.error('Error fetching lyrics:', error);
+      return null;
+    }
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    
+    // Format the track name for the URL
+    const formattedTrackName = track.name.toLowerCase().replace(/\s+/g, '-');
+    console.log("Formatted Track Name:", formattedTrackName); // Log the formatted name
+
+    const lyricsWSUrl = `https://gaana.com/song/${formattedTrackName}`;
+    
+    // Fetch lyrics using web scraping
+    const scrapedLyrics = await scrapeLyrics(lyricsWSUrl);
+    
+    if (scrapedLyrics) {
+        setLyrics(scrapedLyrics);
+    } else {
+        setLyrics("Lyrics not found.");
+    }
+};
+
+
+  const renderTracks = () => {
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)} 
+        style={{
+          cursor: "pointer", 
+          backgroundColor: selectedTrack && selectedTrack.id === track.id ? "lightblue" : "transparent",
+          padding: "10px",
+          border: "1px solid black",
+          margin: "5px"
+        }}
+      >
+        {track.name} by {track.artists.map(artist => artist.name).join(", ")}
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Literator</h1>
+        {!token ? (
+          <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}`}>
+            Login to Spotify
+          </a>
+        ) : (
+          <button onClick={logout}>Logout</button>
+        )}
+
+        {token ? (
+          <form onSubmit={searchTracks}>
+            <input type="text" onChange={e => setSearchKey(e.target.value)} />
+            <button type={"submit"}>Search</button>
+          </form>
+        ) : (
+          <h2>Please login</h2>
+        )}
+
+        {renderTracks()}
+
+        {/* Display lyrics if available */}
+        {selectedTrack && (
+          <div>
+            <h2>Lyrics for {selectedTrack.name}:</h2>
+            <pre>{lyrics}</pre>
+          </div>
+        )}
+      </header>
+    </div>
+  );
+}
+
+export default App;
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+plays music no play pause
+
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+  const SCOPES = [
+    "streaming",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+  ];
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [player, setPlayer] = useState(null);
+  const [deviceId, setDeviceId] = useState(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    let token = window.localStorage.getItem("token");
+
+    if (!token && hash) {
+      token = hash.substring(1).split("&").find(elem => elem.startsWith("access_token")).split("=")[1];
+      window.location.hash = "";
+      window.localStorage.setItem("token", token);
+    }
+
+    setToken(token);
+
+    if (token) {
+      const script = document.createElement("script");
+      script.src = "https://sdk.scdn.co/spotify-player.js";
+      script.async = true;
+      document.body.appendChild(script);
+
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        const player = new window.Spotify.Player({
+          name: 'Web Playback SDK',
+          getOAuthToken: cb => { cb(token); },
+          volume: 0.5
+        });
+
+        player.addListener('ready', ({ device_id }) => {
+          console.log('Ready with Device ID', device_id);
+          setDeviceId(device_id);
+        });
+
+        player.addListener('not_ready', ({ device_id }) => {
+          console.log('Device ID has gone offline', device_id);
+        });
+
+        player.addListener('player_state_changed', (state) => {
+          console.log('Player State Changed:', state);
+        });
+
+        player.connect();
+        setPlayer(player);
+      };
+    }
+  }, [token]);
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    const { data } = await axios.get("https://api.spotify.com/v1/search", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        q: searchKey,
+        type: "track",
+        limit: 5
+      }
+    });
+    setTracks(data.tracks.items);
+  };
+
+  const scrapeLyrics = async (url) => {
+    const cheerio = require('cheerio');
+    try {
+      const { data } = await axios.get(url);
+      const $ = cheerio.load(data);
+      const lyrics = $('.lyrics').text().trim();
+      return lyrics || null;
+    } catch (error) {
+      console.error('Error fetching lyrics:', error);
+      return null;
+    }
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    
+    // Play the selected track using Spotify Web API
+    if (deviceId) {
+      await axios.put(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+        {
+          uris: [track.uri]
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+    }
+
+    // Format the track name for the URL
+    const formattedTrackName = track.name.toLowerCase().replace(/\s+/g, '-');
+    console.log("Formatted Track Name:", formattedTrackName);
+
+    const lyricsWSUrl = `https://gaana.com/song/${formattedTrackName}`;
+    
+    // Fetch lyrics using web scraping
+    const scrapedLyrics = await scrapeLyrics(lyricsWSUrl);
+    
+    if (scrapedLyrics) {
+        setLyrics(scrapedLyrics);
+    } else {
+        setLyrics("Lyrics not found.");
+    }
+  };
+
+  const renderTracks = () => {
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)} 
+        style={{
+          cursor: "pointer", 
+          backgroundColor: selectedTrack && selectedTrack.id === track.id ? "lightblue" : "transparent",
+          padding: "10px",
+          border: "1px solid black",
+          margin: "5px"
+        }}
+      >
+        {track.name} by {track.artists.map(artist => artist.name).join(", ")}
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Literator</h1>
+        {!token ? (
+          <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}&scope=${SCOPES.join("%20")}`}>
+            Login to Spotify
+          </a>
+        ) : (
+          <button onClick={logout}>Logout</button>
+        )}
+
+        {token ? (
+          <form onSubmit={searchTracks}>
+            <input type="text" onChange={e => setSearchKey(e.target.value)} />
+            <button type={"submit"}>Search</button>
+          </form>
+        ) : (
+          <h2>Please login</h2>
+        )}
+
+        {renderTracks()}
+
+        {/* Display lyrics if available */}
+        {selectedTrack && (
+          <div>
+            <h2>Lyrics for "{selectedTrack.name}":</h2>
+            <pre>{lyrics}</pre>
+          </div>
+        )}
+      </header>
+    </div>
+  );
+}
+
+export default App;
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+play pause button no work
+
+
+import { useEffect, useState } from "react";
+import './App.css';
+import axios from 'axios';
+
+function App() {
+  const CLIENT_ID = "cfb3c3c2eb7241508dbccf42a08ba1ec";
+  const REDIRECT_URI = "http://localhost:3000";
+  const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+  const RESPONSE_TYPE = "token";
+  const SCOPES = [
+    "streaming",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+  ];
+
+  const [token, setToken] = useState("");
+  const [searchKey, setSearchKey] = useState("");
+  const [tracks, setTracks] = useState([]);
+  const [lyrics, setLyrics] = useState("");
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [player, setPlayer] = useState(null);
+  const [deviceId, setDeviceId] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false); // State to track playback
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    let token = window.localStorage.getItem("token");
+
+    if (!token && hash) {
+      token = hash.substring(1).split("&").find(elem => elem.startsWith("access_token")).split("=")[1];
+      window.location.hash = "";
+      window.localStorage.setItem("token", token);
+    }
+
+    setToken(token);
+
+    if (token) {
+      const script = document.createElement("script");
+      script.src = "https://sdk.scdn.co/spotify-player.js";
+      script.async = true;
+      document.body.appendChild(script);
+
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        const player = new window.Spotify.Player({
+          name: 'Web Playback SDK',
+          getOAuthToken: cb => { cb(token); },
+          volume: 0.5
+        });
+
+        player.addListener('ready', ({ device_id }) => {
+          console.log('Ready with Device ID', device_id);
+          setDeviceId(device_id);
+        });
+
+        player.addListener('not_ready', ({ device_id }) => {
+          console.log('Device ID has gone offline', device_id);
+        });
+
+        player.addListener('player_state_changed', (state) => {
+          if (!state) return;
+          setIsPlaying(!state.paused); // Update playing state
+        });
+
+        player.connect();
+        setPlayer(player);
+      };
+    }
+  }, [token]);
+
+  const logout = () => {
+    setToken("");
+    window.localStorage.removeItem("token");
+  };
+
+  const searchTracks = async (e) => {
+    e.preventDefault();
+    const { data } = await axios.get("https://api.spotify.com/v1/search", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      params: {
+        q: searchKey,
+        type: "track",
+        limit: 5
+      }
+    });
+    setTracks(data.tracks.items);
+  };
+
+  const handleTrackClick = async (track) => {
+    setSelectedTrack(track);
+    
+    // Play the selected track using Spotify Web API
+    if (deviceId) {
+      await axios.put(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+        {
+          uris: [track.uri]
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      setIsPlaying(true); // Set state to playing
+    }
+  };
+
+  // Toggle Play/Pause
+  const togglePlayPause = async () => {
+    if (isPlaying && player) {
+      await player.pause();
+      setIsPlaying(false);
+    } else if (!isPlaying && player) {
+      await player.resume();
+      setIsPlaying(true);
+    }
+  };
+
+  const renderTracks = () => {
+    return tracks.map((track) => (
+      <div
+        key={track.id}
+        onClick={() => handleTrackClick(track)} 
+        style={{
+          cursor: "pointer", 
+          backgroundColor: selectedTrack && selectedTrack.id === track.id ? "lightblue" : "transparent",
+          padding: "10px",
+          border: "1px solid black",
+          margin: "5px"
+        }}
+      >
+        {track.name} by {track.artists.map(artist => artist.name).join(", ")}
+      </div>
+    ));
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Literator</h1>
+        {!token ? (
+          <a href={`${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=${RESPONSE_TYPE}&scope=${SCOPES.join("%20")}`}>
+            Login to Spotify
+          </a>
+        ) : (
+          <button onClick={logout}>Logout</button>
+        )}
+
+        {token ? (
+          <form onSubmit={searchTracks}>
+            <input type="text" onChange={e => setSearchKey(e.target.value)} />
+            <button type={"submit"}>Search</button>
+          </form>
+        ) : (
+          <h2>Please login</h2>
+        )}
+
+        {renderTracks()}
+
+        {/* Display play/pause button and lyrics if available */}
+        {selectedTrack && (
+          <div>
+            <h2>Lyrics for "{selectedTrack.name}":</h2>
+            <pre>{lyrics}</pre>
+            <button onClick={togglePlayPause}>
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+          </div>
+        )}
+      </header>
+    </div>
+  );
+}
+
+export default App;
